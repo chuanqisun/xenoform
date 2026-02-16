@@ -1,11 +1,14 @@
 /**
- * Panel — left panel toggle, ref toggle, console output.
+ * Panel — left panel toggle, ref toggle, console output, and resize.
  */
+
+import { initPanelResize } from "./panel-resize.ts";
 
 /** Initialize the left panel toggle (show/hide). */
 export function initPanel(): { openPanel: () => void; closePanel: () => void } {
   const leftPanel = document.getElementById("left")!;
   const menuToggle = document.getElementById("menu-toggle")!;
+  const resizeHandle = document.getElementById("resize-handle")!;
 
   function openPanel() {
     leftPanel.classList.add("open");
@@ -30,6 +33,9 @@ export function initPanel(): { openPanel: () => void; closePanel: () => void } {
     apiRef.classList.toggle("visible");
     refBtn.classList.toggle("active", apiRef.classList.contains("visible"));
   });
+
+  // Panel resize (drag right edge)
+  initPanelResize(leftPanel, resizeHandle);
 
   return { openPanel, closePanel };
 }

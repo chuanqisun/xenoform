@@ -73,7 +73,11 @@ export function initPanelResize(panel: HTMLElement, handle: HTMLElement): () => 
     if (isMobile(window.innerWidth)) return;
     e.preventDefault();
     startDrag(state, e.clientX);
-    handle.setPointerCapture(e.pointerId);
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      /* synthetic events may lack a valid pointerId */
+    }
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }
