@@ -1,6 +1,6 @@
 # xenoFORM Programming Manual
 
-[AI Readable version](https://github.com/chuanqisun/xenoform/blob/master/docs/programming-manual.md)
+[AI Readable version](https://raw.githubusercontent.com/chuanqisun/xenoform/refs/heads/master/docs/programming-manual.md)
 
 ## Overview
 
