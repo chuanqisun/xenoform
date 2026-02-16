@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shape Display REPL</title>
+  </head>
+  <body>
+    <button id="menu-toggle" class="header-btn">Show Menu</button>
+
+    <div id="left">
+      <div id="header">
+        <h1>Shape Display</h1>
+        <div id="header-right">
+          <button class="header-btn primary" id="run-btn" title="Ctrl+Enter">Run</button>
+          <button class="header-btn" id="ref-btn">Ref</button>
+          <a class="header-btn" id="help-link" href="https://code.chuanqisun.com/shape-display/programming-manual" target="_blank" rel="noopener noreferrer"
+            >Learn</a
+          >
+          <button class="header-btn" id="hide-btn">Hide</button>
+        </div>
+      </div>
+      <div id="api-ref">
+        <code>wave(freqX, freqZ)</code> · <code>ripple(cx, cz, freq)</code> · <code>checker(size)</code> · <code>gridlines(spacing)</code> ·
+        <code>pyramid()</code> · <code>flat(h)</code> · <code>noise(scale)</code><br />
+        <code>map((x,z,t,n)=>h)</code> x,z∈[0,1] t=time h∈[0,1]<br />
+        <code>.blend(b, mix)</code> · <code>.add(b)</code> · <code>.mul(b)</code> · <code>.inv()</code> · <code>.ease()</code><br />
+        <code>seq(dur, ...patterns)</code> · <code>sleep(t)</code> hold / stop<br />
+        <code>.rotate(angle)</code> · <code>.scale(sx, sz)</code> · <code>.offset(ox, oz)</code><br />
+        <code>.slow(factor)</code> · <code>.fast(factor)</code><br />
+        <code>tween(from, to, dur)</code> · <code>osc(freq, lo, hi)</code><br />
+        <code>saw(freq, lo, hi)</code> · <code>pulse(freq, duty)</code><br />
+        <code>setdim(n)</code> set dimension (2–64, default 32)<br />
+        <code>setbackground(color)</code> set background color<br />
+        <code>setrotate("on"|"off"|"auto")</code> control auto-rotation<br />
+        <code>sin</code> · <code>cos</code> · <code>abs</code> · <code>sqrt</code> · <code>exp</code> · <code>log</code> · <code>pow</code> ·
+        <code>floor</code> · <code>ceil</code> · <code>round</code> · <code>min</code> · <code>max</code> · <code>atan2</code> · <code>hypot</code> ·
+        <code>sign</code><br />
+        <code>PI</code> · <code>TAU</code> · <code>E</code> · <code>clamp(v)</code> · <code>lerp(a,b,t)</code> · <code>fract(v)</code> ·
+        <code>smoothstep(t)</code>
+      </div>
+      <div id="editor-wrap"></div>
+      <div id="console"></div>
+    </div>
+
+    <div id="right"></div>
+
+    <div id="start-overlay"><span>Click to start</span></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
