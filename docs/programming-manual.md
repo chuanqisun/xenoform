@@ -1,6 +1,6 @@
-# Shape Display Programming Manual
+# xenoFORM Programming Manual
 
-[AI Readable version](https://code.chuanqisun.com/shape-display/programming-manual.md)
+[AI Readable version](https://github.com/chuanqisun/xenoform/blob/master/docs/programming-manual.md)
 
 ## Overview
 
