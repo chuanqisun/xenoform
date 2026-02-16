@@ -131,9 +131,8 @@ Signals depend on `t`, which is **program-relative time** (see below), so `tween
 
 `.time(seconds)` wraps a pattern in a `"time"` AST node that carries an explicit duration.
 
-- **Inside `seq()`** — the `seq` compiler calls `unwrapTime()` on each child pattern. If the child is a `"time"` node, the inner pattern is extracted and its `seconds` value is used instead of the default `dur`. This allows individual patterns to hold for longer or shorter than the sequence's base duration.
-- **Inside `seq()`** — the `seq` compiler calls `unwrapTime()` on each child pattern. If the child is a `"time"` node, the inner pattern is extracted and its `seconds` value is used instead of the default `secondsPerCycle` duration.
-- **Outside `seq()`** — the `"time"` compile case is a transparent pass-through; it delegates directly to its source pattern. The duration metadata is inert when not consumed by the timeline builder.
+- **Inside `seq()`** — the `seq` compiler calls `unwrapTime()` on each child pattern. If the child is a `"time"` node, the inner pattern is extracted and its `seconds` value is used instead of the default `secondsPerCycle` duration. This allows individual patterns to hold for longer or shorter than the sequence's base duration.
+- **Outside top-level `seq()`** — the compiled function is a visual pass-through to its source (`h` is unchanged), but the node still carries duration metadata used by parent nodes (for example `blend/add/mul` duration propagation, or when such a composite is later placed in `seq()`).
 
 Example: `seq(wave(1,1).time(10), pyramid())` gives the wave 10 seconds while the pyramid keeps its default cycle duration.
 

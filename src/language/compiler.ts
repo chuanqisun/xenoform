@@ -146,10 +146,23 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
         }
 
         const compiled = compileNode(inner, ctx);
+        const targetDur = explicitDur ?? compiled.duration;
+        let fn = compiled.fn;
+        if (
+          explicitDur !== null &&
+          Number.isFinite(explicitDur) &&
+          explicitDur > 0 &&
+          Number.isFinite(compiled.duration) &&
+          compiled.duration > 0
+        ) {
+          const scale = compiled.duration / explicitDur;
+          const srcFn = compiled.fn;
+          fn = (x, z, t, n) => srcFn(x, z, t * scale, n);
+        }
         planned.push({
           type: "p",
-          fn: compiled.fn,
-          duration: explicitDur ?? compiled.duration,
+          fn,
+          duration: targetDur,
         });
       }
 
@@ -316,6 +329,20 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
       const srcNode = compileNode(a.source as Pattern, ctx);
       const srcFn = srcNode.fn;
       const seconds = a.seconds as number;
+      const source = a.source as Pattern;
+      if (
+        source._type === "seq" &&
+        Number.isFinite(seconds) &&
+        seconds > 0 &&
+        Number.isFinite(srcNode.duration) &&
+        srcNode.duration > 0
+      ) {
+        const scale = srcNode.duration / seconds;
+        return {
+          fn: (x, z, t, n) => srcFn(x, z, t * scale, n),
+          duration: seconds,
+        };
+      }
       return {
         fn: (x, z, t, n) => srcFn(x, z, t, n),
         duration: seconds,

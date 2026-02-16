@@ -206,6 +206,23 @@ checker(4).ease(); // rounded checkerboard
 
 ## Sequencing
 
+### Duration control with `.time()`
+
+Use `.time(seconds)` on any item inside `seq()` to override that item's duration.
+
+```js
+// wave lasts 10s; others use setspc/default duration
+seq(wave(1, 1).time(10), pyramid(), checker(4));
+```
+
+Applying `.time()` to a nested `seq` sets that nested sequence's total duration:
+
+```js
+seq(wave(1, 1), seq(pyramid(), checker(4)).time(12));
+```
+
+Outside `seq()`, `.time()` does not change the rendered shape by itself.
+
 ### `seq(...patterns)`
 
 Cycle through patterns with smooth crossfade transitions. Each non-sleep pattern gets one cycle by default. A cycle is `secondsPerCycle` seconds (default 1s, configurable via `setspc(n)`). The sequence loops indefinitely.

@@ -215,6 +215,29 @@ describe("compiler", () => {
       expect(v).toBeGreaterThan(0);
       expect(v).toBeLessThan(1);
     });
+
+    it("top-level seq().time() compresses timeline instead of being ignored", () => {
+      const p1 = new Pattern("flat", { h: 0 });
+      const p2 = new Pattern("flat", { h: 1 });
+      const seq = new Pattern("seq", { patterns: [p1, p2] });
+      const fn = compile(new Pattern("time", { source: seq, seconds: 1.4 }));
+      // Base seq second pattern starts at t=1.4; compressing 2.8s -> 1.4s should reach it by t=0.7.
+      expect(fn(0, 0, 1.0, 32)).toBeCloseTo(1);
+    });
+
+    it("nested seq .time() compresses inner timeline instead of cropping", () => {
+      const a = new Pattern("flat", { h: 0.25 });
+      const b = new Pattern("flat", { h: 0.75 });
+      const inner = new Pattern("time", {
+        source: new Pattern("seq", { patterns: [a, b] }),
+        seconds: 1.4,
+      });
+      const outer = new Pattern("seq", { patterns: [inner] });
+      const fn = compile(outer);
+      // If compressed, inner local t=1.0 maps to source t=2.0 (firmly in second pattern).
+      // If cropped, inner local t=1.0 stays t=1.0 (still in first pattern).
+      expect(fn(0, 0, 1.0, 32)).toBeCloseTo(0.75);
+    });
   });
 
   describe("time", () => {
