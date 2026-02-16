@@ -143,7 +143,8 @@ When `.time(seconds)` wraps a `seq`, it sets that nested seq's total duration: `
 The `seq` compiler uses a fixed **seconds-per-cycle (SPC)** model:
 
 - Every non-sleep child pattern has a default duration of `secondsPerCycle`.
-- Nested `seq` keeps the same SPC and contributes its own computed total duration to the parent.
+- Bare nested `seq` patterns are **recursively flattened** into the parent: `seq(a, seq(b, c))` compiles identically to `seq(a, b, c)`.
+- Nested seqs wrapped in transforms (e.g. `seq(b, c).rotate(...)`) are NOT flattened and play once as a block.
 - `.time(seconds)` overrides the duration of that specific child item.
 - No proportional subdivision is performed.
 
@@ -155,9 +156,13 @@ The `seq` compiler builds a flat list of **timeline segments**:
 | `"x"` (crossfade) | `from`, `to` | Smoothstep crossfade over ≤0.8 s                                         |
 | `"h"` (hold)      | `fn`         | Hold a pattern for `sleep(t)` seconds                                    |
 
-If the sequence contains `sleep(Infinity)`, `totalDur` is set to `Infinity` and the sequence does **not loop**. Otherwise `totalDur` is finite and time wraps via modulo for looping.
+The compiled seq function always **plays once** — it walks the segments linearly without modulo wrapping. When time exceeds all segments, the last pattern holds.
 
-The wrap-around transition from the last pattern to the first uses the same transition duration rule as any other transition.
+**Top-level looping** is added by `compile()`, not by `compileNode()`. When the root pattern has `loop: true` (set by the seq case) and a finite duration, `compile()` wraps the function with `t % loopDuration`. If the seq has distinct first and last patterns, a smooth crossfade is inserted at the loop boundary (using the `wrapInfo` metadata). This separation ensures nested seqs play once while the outermost seq loops.
+
+If the sequence contains `sleep(Infinity)`, `totalDur` is set to `Infinity` and the sequence does **not loop**.
+
+The `loop` and `wrapInfo` metadata propagate through single-source transforms (rotate, scale, offset, slow, fast, ease, inv) and `time`, so `seq(a, b).rotate(PI)` still loops at the top level.
 
 Patterns inside a seq receive **local time** (time relative to segment start, not global program time). This keeps nested sequencing stable — an inner seq sees time from 0 inside its own (possibly longer) block.
 

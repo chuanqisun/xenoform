@@ -195,15 +195,21 @@ describe("compiler", () => {
       expect(fn(0, 0, 9, 32)).toBeCloseTo(0.2);
     });
 
-    it("nested seq subdivides parent allocation", () => {
+    it("nested seq flattens into parent sequence", () => {
       const a = new Pattern("flat", { h: 0.1 });
       const b = new Pattern("flat", { h: 0.5 });
       const c = new Pattern("flat", { h: 0.9 });
       const innerSeq = new Pattern("seq", { patterns: [b, c] });
-      // nested seq extends duration instead of subdividing parent duration
+      // Bare nested seq is flattened: seq(a, seq(b, c)) => seq(a, b, c)
       const fn = compile(new Pattern("seq", { patterns: [a, innerSeq] }));
       // At t=0, should be in pattern a
       expect(fn(0, 0, 0, 32)).toBeCloseTo(0.1);
+      // At t=0.5, still in a (spc=1)
+      expect(fn(0, 0, 0.5, 32)).toBeCloseTo(0.1);
+      // At t=1.8, in b (after a[0,1] + xfade[1,1.4], b starts at 1.4)
+      expect(fn(0, 0, 1.8, 32)).toBeCloseTo(0.5);
+      // At t=3.2, in c (after b[1.4,2.4] + xfade[2.4,2.8], c starts at 2.8)
+      expect(fn(0, 0, 3.2, 32)).toBeCloseTo(0.9);
     });
 
     it("wrap transition has the same duration rule as internal transitions", () => {
@@ -237,6 +243,42 @@ describe("compiler", () => {
       // If compressed, inner local t=1.0 maps to source t=2.0 (firmly in second pattern).
       // If cropped, inner local t=1.0 stays t=1.0 (still in first pattern).
       expect(fn(0, 0, 1.0, 32)).toBeCloseTo(0.75);
+    });
+
+    it("deeply nested seq flattens recursively", () => {
+      const a = new Pattern("flat", { h: 0.1 });
+      const b = new Pattern("flat", { h: 0.5 });
+      const c = new Pattern("flat", { h: 0.9 });
+      const inner = new Pattern("seq", { patterns: [b, new Pattern("seq", { patterns: [c] })] });
+      const fn = compile(new Pattern("seq", { patterns: [a, inner] }));
+      // All three patterns should be at the top level: a, b, c
+      expect(fn(0, 0, 0, 32)).toBeCloseTo(0.1);
+      // b starts at 1.4 (after a[0,1] + xfade[1,1.4])
+      expect(fn(0, 0, 1.8, 32)).toBeCloseTo(0.5);
+      // c starts at 2.8 (after b[1.4,2.4] + xfade[2.4,2.8])
+      expect(fn(0, 0, 3.2, 32)).toBeCloseTo(0.9);
+    });
+
+    it("top-level seq loops while nested seq plays once", () => {
+      // seq(flat(0), seq(flat(0.25), flat(1))) should flatten to seq(flat(0), flat(0.25), flat(1))
+      // and the whole thing should loop
+      const fn = compile(
+        new Pattern("seq", {
+          patterns: [
+            new Pattern("flat", { h: 0 }),
+            new Pattern("seq", {
+              patterns: [new Pattern("flat", { h: 0.25 }), new Pattern("flat", { h: 1 })],
+            }),
+          ],
+        }),
+      );
+      // Should start with flat(0)
+      expect(fn(0, 0, 0, 32)).toBeCloseTo(0);
+      // After one full loop, should be back at flat(0)
+      // Segments: flat(0)[0,1], xfade[1,1.4], flat(0.25)[1.4,2.4], xfade[2.4,2.8], flat(1)[2.8,3.8]
+      // + wrap xfade[3.8,4.2] = loopDur 4.2
+      // At t=4.5: lt = 4.5 % 4.2 = 0.3 → in flat(0) → 0
+      expect(fn(0, 0, 4.5, 32)).toBeCloseTo(0);
     });
   });
 

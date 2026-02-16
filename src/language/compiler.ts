@@ -32,6 +32,10 @@ const defaultContext: CompileContext = {
 interface CompiledNode {
   fn: PatternFn;
   duration: number;
+  /** If true, compile() will add top-level looping (modulo + wrap crossfade). */
+  loop?: boolean;
+  /** For seq nodes: metadata for the wrap-around crossfade at loop boundaries. */
+  wrapInfo?: { firstFn: PatternFn; lastFn: PatternFn; firstDuration: number };
 }
 
 function resolveArgWithContext(v: unknown, ctx: CompileContext): PatternFn {
@@ -41,23 +45,70 @@ function resolveArgWithContext(v: unknown, ctx: CompileContext): PatternFn {
   return () => c;
 }
 
-/** Compile a Pattern AST node into an executable PatternFn. */
+function transitionDuration(toDur: number): number {
+  return Math.min(0.8, toDur * 0.4);
+}
+
+/**
+ * Recursively flatten bare nested seq patterns.
+ * `seq(a, seq(b, c))` becomes `seq(a, b, c)`.
+ * Nested seqs wrapped in transforms (e.g. `.rotate()`) are NOT flattened.
+ */
+function flattenSeqItems(patterns: Pattern[]): Pattern[] {
+  const result: Pattern[] = [];
+  for (const p of patterns) {
+    if (p._type === "seq") {
+      result.push(...flattenSeqItems(p._args.patterns as Pattern[]));
+    } else {
+      result.push(p);
+    }
+  }
+  return result;
+}
+
+/**
+ * Compile a Pattern AST node into an executable PatternFn.
+ *
+ * Top-level seq patterns loop automatically: the compiled function wraps
+ * time with modulo and adds a smooth crossfade at the loop boundary.
+ * Nested seq patterns (compiled via compileNode) play once.
+ */
 export function compile(pat: Pattern, ctx: Partial<CompileContext> = {}): PatternFn {
   const fullCtx: CompileContext = {
     ...defaultContext,
     ...ctx,
   };
-  return compileNode(pat, fullCtx).fn;
+  const node = compileNode(pat, fullCtx);
+
+  // Add top-level looping for finite-duration sequence patterns
+  if (node.loop && Number.isFinite(node.duration) && node.duration > 0) {
+    const { fn, duration } = node;
+
+    if (node.wrapInfo) {
+      // Loop with smooth crossfade at wrap boundary
+      const { firstFn, lastFn, firstDuration } = node.wrapInfo;
+      const tt = transitionDuration(firstDuration);
+      const loopDur = duration + tt;
+      return (x, z, t, n) => {
+        const lt = t % loopDur;
+        if (lt < duration) return fn(x, z, lt, n);
+        const bl = smoothstep((lt - duration) / tt);
+        const localT = lt - duration;
+        return (lastFn(x, z, localT, n) ?? 0) * (1 - bl) + (firstFn(x, z, localT, n) ?? 0) * bl;
+      };
+    }
+
+    // Simple modulo loop (single-pattern seq, no crossfade needed)
+    return (x, z, t, n) => fn(x, z, t % duration, n);
+  }
+
+  return node.fn;
 }
 
 function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
   const { _type: type, _args: a } = pat;
   const { sin, cos, abs, sqrt, floor, PI, max, round } = Math;
   const spc = ctx.secondsPerCycle;
-
-  function transitionDuration(toDur: number): number {
-    return Math.min(0.8, toDur * 0.4);
-  }
 
   function unwrapTime(p: Pattern): { inner: Pattern; duration: number | null } {
     if (p._type === "time") {
@@ -117,7 +168,8 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
     case "sleep":
       return { fn: () => 0, duration: (a.duration as number) ?? Infinity };
     case "seq": {
-      const items = a.patterns as Pattern[];
+      const rawItems = a.patterns as Pattern[];
+      const items = flattenSeqItems(rawItems);
 
       interface Segment {
         s: number;
@@ -202,24 +254,19 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
         }
       }
 
-      if (!hasInfHold && firstFn && lastFn && firstFn !== lastFn) {
-        const tt = transitionDuration(firstPatternDur);
-        segs.push({ s: cursor, e: cursor + tt, type: "x", from: lastFn, to: firstFn });
-        cursor += tt;
-      }
-
+      // No wrap-around crossfade here — looping is added by compile() at the top level.
       const totalDur = hasInfHold ? Infinity : cursor;
 
       const fn: PatternFn = (x, z, t, n) => {
-        const lt = isFinite(totalDur) && totalDur > 0 ? t % totalDur : t;
+        // Play once — no modulo. Top-level looping is handled by compile().
         for (const seg of segs) {
-          if (lt < seg.e || !isFinite(seg.e)) {
+          if (t < seg.e || !isFinite(seg.e)) {
             if (seg.type === "p" || seg.type === "h") {
-              return seg.fn ? seg.fn(x, z, lt - seg.s, n) : 0;
+              return seg.fn ? seg.fn(x, z, t - seg.s, n) : 0;
             }
             if (seg.type === "x") {
-              const bl = smoothstep((lt - seg.s) / (seg.e - seg.s));
-              const localT = lt - seg.s;
+              const bl = smoothstep((t - seg.s) / (seg.e - seg.s));
+              const localT = t - seg.s;
               return (seg.from?.(x, z, localT, n) ?? 0) * (1 - bl) + (seg.to?.(x, z, localT, n) ?? 0) * bl;
             }
           }
@@ -227,7 +274,14 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
         return lastFn ? lastFn(x, z, 0, n) : 0;
       };
 
-      return { fn, duration: totalDur };
+      return {
+        fn,
+        duration: totalDur,
+        loop: true,
+        wrapInfo: (!hasInfHold && firstFn && lastFn && firstFn !== lastFn)
+          ? { firstFn, lastFn, firstDuration: firstPatternDur }
+          : undefined,
+      };
     }
     case "rotate": {
       const srcNode = compileNode(a.source as Pattern, ctx);
@@ -241,6 +295,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
           return srcFn(cx2 * cos(ang) - cz2 * sin(ang) + 0.5, cx2 * sin(ang) + cz2 * cos(ang) + 0.5, t, n);
         },
         duration: srcNode.duration,
+        loop: srcNode.loop,
       };
     }
     case "scale": {
@@ -251,6 +306,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
       return {
         fn: (x, z, t, n) => srcFn((x - 0.5) / sx + 0.5, (z - 0.5) / sz + 0.5, t, n),
         duration: srcNode.duration,
+        loop: srcNode.loop,
       };
     }
     case "offset": {
@@ -261,6 +317,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
       return {
         fn: (x, z, t, n) => srcFn(x - oxFn(x, z, t, n), z - ozFn(x, z, t, n), t, n),
         duration: srcNode.duration,
+        loop: srcNode.loop,
       };
     }
     case "slow": {
@@ -270,6 +327,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
       return {
         fn: (x, z, t, n) => srcFn(x, z, t / f, n),
         duration: srcNode.duration * f,
+        loop: srcNode.loop,
       };
     }
     case "fast": {
@@ -279,17 +337,18 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
       return {
         fn: (x, z, t, n) => srcFn(x, z, t * f, n),
         duration: srcNode.duration / f,
+        loop: srcNode.loop,
       };
     }
     case "ease": {
       const srcNode = compileNode(a.source as Pattern, ctx);
       const srcFn = srcNode.fn;
-      return { fn: (x, z, t, n) => smoothstep(srcFn(x, z, t, n)), duration: srcNode.duration };
+      return { fn: (x, z, t, n) => smoothstep(srcFn(x, z, t, n)), duration: srcNode.duration, loop: srcNode.loop };
     }
     case "inv": {
       const srcNode = compileNode(a.source as Pattern, ctx);
       const srcFn = srcNode.fn;
-      return { fn: (x, z, t, n) => 1 - srcFn(x, z, t, n), duration: srcNode.duration };
+      return { fn: (x, z, t, n) => 1 - srcFn(x, z, t, n), duration: srcNode.duration, loop: srcNode.loop };
     }
     case "blend": {
       const aNode = compileNode(a.a as Pattern, ctx);
@@ -341,11 +400,15 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
         return {
           fn: (x, z, t, n) => srcFn(x, z, t * scale, n),
           duration: seconds,
+          loop: srcNode.loop,
+          wrapInfo: srcNode.wrapInfo,
         };
       }
       return {
         fn: (x, z, t, n) => srcFn(x, z, t, n),
         duration: seconds,
+        loop: srcNode.loop,
+        wrapInfo: srcNode.wrapInfo,
       };
     }
     default:

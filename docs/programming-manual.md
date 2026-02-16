@@ -225,17 +225,18 @@ Outside `seq()`, `.time()` does not change the rendered shape by itself.
 
 ### `seq(...patterns)`
 
-Cycle through patterns with smooth crossfade transitions. Each non-sleep pattern gets one cycle by default. A cycle is `secondsPerCycle` seconds (default 1s, configurable via `setspc(n)`). The sequence loops indefinitely.
+Cycle through patterns with smooth crossfade transitions. Each non-sleep pattern gets one cycle by default. A cycle is `secondsPerCycle` seconds (default 1s, configurable via `setspc(n)`). The top-level sequence loops indefinitely.
 
 ```js
 seq(flat(0), pyramid(), wave(2, 2), ripple(0.5, 0.5, 4), checker(5));
 ```
 
-Nesting `seq()` keeps the same seconds-per-cycle and extends total sequence duration:
+Nesting `seq()` flattens children into the parent — a nested `seq` plays once, not in a loop:
 
 ```js
-// all patterns use the same cycle length; nesting makes the total longer
+// These two are equivalent — nesting is flattened:
 seq(wave(1, 1), seq(pyramid(), checker(4)));
+seq(wave(1, 1), pyramid(), checker(4));
 ```
 
 You can chain transforms on a sequence:
@@ -542,7 +543,7 @@ seq(wave(1, 1), noise(5).time(8), pyramid(), checker(4));
 **Nested subdivision:**
 
 ```js
-// nesting keeps the same seconds-per-cycle and extends total duration
+// nesting flattens — this is equivalent to seq(wave(1,1), pyramid(), checker(4))
 seq(wave(1, 1), seq(pyramid(), checker(4)));
 ```
 
