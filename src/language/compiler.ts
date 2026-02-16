@@ -191,7 +191,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
       for (const item of items) {
         const { inner, duration: explicitDur } = unwrapTime(item);
         if (inner._type === "sleep") {
-          const sleepDur = explicitDur ?? ((inner._args.duration as number) ?? Infinity);
+          const sleepDur = explicitDur ?? (inner._args.duration as number) ?? Infinity;
           planned.push({ type: "h", fn: () => 0, duration: sleepDur });
           if (!isFinite(sleepDur)) break;
           continue;
@@ -200,13 +200,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
         const compiled = compileNode(inner, ctx);
         const targetDur = explicitDur ?? compiled.duration;
         let fn = compiled.fn;
-        if (
-          explicitDur !== null &&
-          Number.isFinite(explicitDur) &&
-          explicitDur > 0 &&
-          Number.isFinite(compiled.duration) &&
-          compiled.duration > 0
-        ) {
+        if (explicitDur !== null && Number.isFinite(explicitDur) && explicitDur > 0 && Number.isFinite(compiled.duration) && compiled.duration > 0) {
           const scale = compiled.duration / explicitDur;
           const srcFn = compiled.fn;
           fn = (x, z, t, n) => srcFn(x, z, t * scale, n);
@@ -278,9 +272,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
         fn,
         duration: totalDur,
         loop: true,
-        wrapInfo: (!hasInfHold && firstFn && lastFn && firstFn !== lastFn)
-          ? { firstFn, lastFn, firstDuration: firstPatternDur }
-          : undefined,
+        wrapInfo: !hasInfHold && firstFn && lastFn && firstFn !== lastFn ? { firstFn, lastFn, firstDuration: firstPatternDur } : undefined,
       };
     }
     case "rotate": {
@@ -389,13 +381,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
       const srcFn = srcNode.fn;
       const seconds = a.seconds as number;
       const source = a.source as Pattern;
-      if (
-        source._type === "seq" &&
-        Number.isFinite(seconds) &&
-        seconds > 0 &&
-        Number.isFinite(srcNode.duration) &&
-        srcNode.duration > 0
-      ) {
+      if (source._type === "seq" && Number.isFinite(seconds) && seconds > 0 && Number.isFinite(srcNode.duration) && srcNode.duration > 0) {
         const scale = srcNode.duration / seconds;
         return {
           fn: (x, z, t, n) => srcFn(x, z, t * scale, n),
