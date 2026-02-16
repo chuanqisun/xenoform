@@ -9,6 +9,8 @@
   --accent: #61afef;
   --accent-hover: #528bff;
   --error: #e06c75;
+
+  color-scheme: dark;
 }
 
 * {
