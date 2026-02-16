@@ -11,30 +11,15 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView, highlightActiveLine, keymap } from "@codemirror/view";
 import { decompressFromURL } from "../utils/url-compression.ts";
 
-export const defaultCode = `// Shape Display — chain patterns with methods
-// x, z ∈ [0,1]  t = time  n = grid size
-// Ctrl/Cmd + Enter to run
+export const defaultCode = `// Shape Display — chain patterns with transforms
+// Press Ctrl/Cmd + Enter to run
 
 seq(
-  flat(0),
-  wave(1, 1).rotate(tween(0, PI, 4)),
-  ripple(0.5, 0.5, 3),
-  checker(5).rotate(osc(0.2, -PI/4, PI/4)),
-  gridlines(5),
-  pyramid().blend(
-    noise(5),
-    osc(0.3)
-  ),
-  map((x, z, t) => sin((x + z) * 6) * 0.5 + 0.5),
+  wave(1, 1),
+  pyramid(),
   noise(5),
-  flat(0.02),
-  blend(
-    wave(2, 0),
-    ripple(0.3, 0.7, 4),
-    map((x, z, t) =>
-      sin(t * 0.5) * 0.5 + 0.5
-    )
-  )
+  checker(5),
+  ripple(0.5, 0.5, 3),
 )`;
 
 /** Create the CodeMirror editor and return an API to interact with it. */

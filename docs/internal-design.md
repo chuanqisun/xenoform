@@ -13,7 +13,7 @@ User Code  →  Pattern AST  →  compile()  →  (x,z,t,n)=>h  →  Scheduler (
 ```
 
 1. **Pattern creation** — The user script builds a tree of `Pattern` objects via factory functions and chained method calls.
-2. **Compilation** — `Pattern._compile()` walks the AST and produces a single `(x, z, t, n) => h` function.
+2. **Compilation** — `compile()` walks the AST and produces a single `(x, z, t, n) => h` function.
 3. **Scheduling** — The `requestAnimationFrame` loop maintains its own clock (`globalTime`) and queries the compiled function every frame.
 
 ## Pattern Class
@@ -58,14 +58,14 @@ This means intermediate patterns created during chaining (e.g. the `noise(2)` no
 
 ### Compilation
 
-`_compileNode(pattern)` is a recursive switch over `_type`. Each case:
+`compileNode(pattern)` is a recursive switch over `_type`. Each case:
 
 1. Compiles any child `Pattern` references in `_args` (recursive).
 2. Returns a closure `(x, z, t, n) => h` that captures the compiled children.
 
-Arguments that could be either a `Pattern`, a raw function, or a number are resolved by `_resolveArg()`, which normalizes them into `(x, z, t, n) => value` functions.
+Arguments that could be either a `Pattern`, a raw function, or a number are resolved by `resolveArg()`, which normalizes them into `(x, z, t, n) => value` functions.
 
-Compilation happens **once** when the user triggers a run (Ctrl+Enter). The compiled function is stored as `activePattern` and evaluated 30×30 = 900 times per frame.
+Compilation happens **once** when the user triggers a run (Ctrl+Enter). The compiled function is stored as `activePattern` and evaluated n×n times per frame (default 32×32 = 1024).
 
 ## Scheduler (Render Loop)
 
@@ -104,7 +104,7 @@ All factory functions create `Pattern` instances. Math utilities (`sin`, `cos`, 
 
 ## Animation Signals
 
-Animation signals are plain functions `(x, z, t, n) => number` that can be used anywhere a static value is accepted. Because `_resolveArg()` already normalises functions, signals compose naturally with transforms:
+Animation signals are plain functions `(x, z, t, n) => number` that can be used anywhere a static value is accepted. Because `resolveArg()` already normalises functions, signals compose naturally with transforms:
 
 ```js
 wave(1, 1).rotate(tween(0, PI, 5)); // animate rotation over 5 s
@@ -179,8 +179,8 @@ When the user runs the code (Ctrl+Enter), `programStartTime` is captured from `g
 `setdim(n)` allows the user to set the pin grid resolution from 2 to 64 (default 32). It works via a **deferred rebuild** pattern:
 
 1. During script execution, `setdim(n)` stores the requested size in pending config.
-2. After the script finishes, `runProgram()` checks `_pendingGridSize` and calls `rebuildGrid(n)` if changed.
-3. `rebuildGrid(n)` tears down the old instanced mesh, edge geometry, shell, and data arrays, then creates new ones sized to `n × n`.
+2. After the script finishes, the runtime checks `config.gridSize` and rebuilds the pin field if changed.
+3. `buildPinField(scene, n, oldField)` tears down the old instanced mesh and data arrays, then creates new ones sized to `n × n`.
 
 `setspc(n)` follows the same pending-config model and sets global seconds-per-cycle used by `seq` compilation.
 
@@ -188,14 +188,14 @@ When the user runs the code (Ctrl+Enter), `programStartTime` is captured from `g
 
 To add a new pattern type (e.g. `diamond`):
 
-1. **Factory function** — Add `function _diamond(...) { return new Pattern("diamond", { ... }); }` and include it in `_scopeNames`/`_scopeValues`.
-2. **Compile case** — Add a `case "diamond":` in `_compileNode` that returns `(x, z, t, n) => h`.
+1. **Factory function** — Add `function diamond(...) { return new Pattern("diamond", { ... }); }` in `pattern-factories.ts` and register it in `scope.ts`.
+2. **Compile case** — Add a `case "diamond":` in `compileNode` that returns `(x, z, t, n) => h`.
 3. **Docs** — Update the API reference panel in HTML, `programming-manual.md`, and this document.
 
 To add a new transform (e.g. `mirror`):
 
 1. **Method** — Add `mirror(...) { return new Pattern("mirror", { source: this, ... }); }` to the `Pattern` class.
-2. **Compile case** — Add the corresponding case in `_compileNode`.
+2. **Compile case** — Add the corresponding case in `compileNode`.
 3. **Docs** — Update all documentation.
 
 ## URL Sharing

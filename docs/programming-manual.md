@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Shape Display is a programmable 30×30 grid of motorized pins. Each pin's height is controlled in real-time by a pattern you write in JavaScript. Patterns are created by calling factory functions and chaining transform methods — no `return` statement needed.
+The Shape Display is a programmable 32×32 grid of motorized pins (configurable via `setdim(n)`). Each pin's height is controlled in real-time by a pattern you write in JavaScript. Patterns are created by calling factory functions and chaining transform methods — no `return` statement needed.
 
 **Core concept:** Everything is a _Pattern_. A pattern describes a height field over space and time:
 
