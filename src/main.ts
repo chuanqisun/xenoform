@@ -1,28 +1,15 @@
-/**
- * Application entry point — wires together all decoupled modules.
- *
- * Layers:
- *   utils/      — pure helper functions
- *   language/   — Pattern AST & compiler
- *   library/    — built-in DSL APIs (factories, signals, config)
- *   runtime/    — interpreter & scheduler
- *   output/     — 3D rendering & audio
- *   ui/         — editor, panel, overlay
- */
-
 import * as THREE from "three";
-import "./style.css";
-
-import { compressToURL } from "./utils/url-compression.ts";
-import { createScene, resize, setRotateMode } from "./output/scene-setup.ts";
-import { buildPinField } from "./output/pin-field-renderer.ts";
-import type { PinField } from "./output/pin-field-renderer.ts";
-import { createAudioEngine } from "./output/audio-engine.ts";
 import type { AudioEngine } from "./output/audio-engine.ts";
+import { createAudioEngine } from "./output/audio-engine.ts";
+import type { PinField } from "./output/pin-field-renderer.ts";
+import { buildPinField } from "./output/pin-field-renderer.ts";
+import { createScene, resize, setRotateMode } from "./output/scene-setup.ts";
 import { runCode } from "./runtime/interpreter.ts";
 import { createSchedulerState, startLoop } from "./runtime/scheduler.ts";
+import "./style.css";
 import { createEditor } from "./ui/editor.ts";
-import { initPanel, setConsoleMessage, clearConsole } from "./ui/panel.ts";
+import { clearConsole, initPanel, setConsoleMessage } from "./ui/panel.ts";
+import { compressToURL } from "./utils/url-compression.ts";
 
 // --- UI setup ---
 initPanel();
