@@ -30,7 +30,8 @@ export type PatternType =
   | "inv"
   | "blend"
   | "add"
-  | "mul";
+  | "mul"
+  | "time";
 
 /** Pattern arguments — kept as a loose record so each type can carry its own data. */
 export type PatternArgs = Record<string, unknown>;
@@ -106,6 +107,10 @@ export class Pattern {
 
   mul(other: Pattern): Pattern {
     return new Pattern("mul", { a: this, b: other });
+  }
+
+  time(seconds: number): Pattern {
+    return new Pattern("time", { source: this, seconds });
   }
 
   // --- Registry helpers ---

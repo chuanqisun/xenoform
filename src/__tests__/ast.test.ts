@@ -30,7 +30,7 @@ describe("Pattern AST", () => {
   it("tracks array children in args (e.g. seq patterns)", () => {
     const p1 = new Pattern("flat", { h: 0 });
     const p2 = new Pattern("wave", { fx: 1, fz: 1 });
-    const seq = new Pattern("seq", { dur: 1, patterns: [p1, p2] });
+    const seq = new Pattern("seq", { patterns: [p1, p2] });
     expect(Pattern.getRoots()).toEqual([seq]);
   });
 
@@ -91,6 +91,13 @@ describe("Pattern AST", () => {
       const p = new Pattern("wave", { fx: 1, fz: 1 });
       expect(p.slow(2)._type).toBe("slow");
       expect(p.fast(2)._type).toBe("fast");
+    });
+
+    it("time() creates a time duration node", () => {
+      const p = new Pattern("wave", { fx: 1, fz: 1 }).time(5);
+      expect(p._type).toBe("time");
+      expect(p._args.seconds).toBe(5);
+      expect(p._args.source).toBeInstanceOf(Pattern);
     });
 
     it("offset() creates an offset node", () => {

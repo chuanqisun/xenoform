@@ -32,7 +32,7 @@ export function runCode(code: string): RunResult {
 
     const roots = Pattern.getRoots();
     if (roots.length > 0) {
-      const pattern = compile(roots[roots.length - 1]);
+      const pattern = compile(roots[roots.length - 1], { secondsPerCycle: config.secondsPerCycle ?? 1 });
       return { pattern, config, error: null, warning: null };
     } else {
       return { pattern: null, config, error: null, warning: "No pattern created" };

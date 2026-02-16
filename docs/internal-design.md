@@ -41,7 +41,7 @@ Pattern("rotate", {
 
 ### Chaining
 
-Every method on `Pattern` (`rotate`, `slow`, `blend`, etc.) creates a **new** `Pattern` node whose `_args.source` (or `_args.a`) references `this`. This builds the AST without mutating any existing node.
+Every method on `Pattern` (`rotate`, `slow`, `blend`, `time`, etc.) creates a **new** `Pattern` node whose `_args.source` (or `_args.a`) references `this`. This builds the AST without mutating any existing node.
 
 ### Auto-Registration (No `return`)
 
@@ -95,7 +95,7 @@ The user code runs inside `new Function(...)` with injected parameter names:
 wave, ripple, checker, gridlines, pyramid, flat, noise, map, seq, sleep,
 blend, add, mul, inv, ease,
 tween, osc, saw, pulse,
-grid,
+setdim, setbackground, setrotate, setspc,
 sin, cos, abs, sqrt, floor, PI,
 clamp, lerp, smoothstep
 ```
@@ -127,17 +127,40 @@ Signals depend on `t`, which is **program-relative time** (see below), so `tween
 - **`sleep(t)`** — holds the previous pattern for `t` seconds (the pattern keeps animating, just no transition to the next one)
 - **`sleep(Infinity)`** — halts the sequence permanently (no looping)
 
+## Duration Override (`.time()`)
+
+`.time(seconds)` wraps a pattern in a `"time"` AST node that carries an explicit duration.
+
+- **Inside `seq()`** — the `seq` compiler calls `unwrapTime()` on each child pattern. If the child is a `"time"` node, the inner pattern is extracted and its `seconds` value is used instead of the default `dur`. This allows individual patterns to hold for longer or shorter than the sequence's base duration.
+- **Inside `seq()`** — the `seq` compiler calls `unwrapTime()` on each child pattern. If the child is a `"time"` node, the inner pattern is extracted and its `seconds` value is used instead of the default `secondsPerCycle` duration.
+- **Outside `seq()`** — the `"time"` compile case is a transparent pass-through; it delegates directly to its source pattern. The duration metadata is inert when not consumed by the timeline builder.
+
+Example: `seq(wave(1,1).time(10), pyramid())` gives the wave 10 seconds while the pyramid keeps its default cycle duration.
+
+When `.time(seconds)` wraps a `seq`, it sets that nested seq's total duration: `seq(a, seq(b, c).time(5))` compiles the inner seq as a 5-second block.
+
 ### Seq Compilation (Timeline Model)
+
+The `seq` compiler uses a fixed **seconds-per-cycle (SPC)** model:
+
+- Every non-sleep child pattern has a default duration of `secondsPerCycle`.
+- Nested `seq` keeps the same SPC and contributes its own computed total duration to the parent.
+- `.time(seconds)` overrides the duration of that specific child item.
+- No proportional subdivision is performed.
 
 The `seq` compiler builds a flat list of **timeline segments**:
 
-| Segment type      | Key          | Description                           |
-| ----------------- | ------------ | ------------------------------------- |
-| `"p"` (pattern)   | `fn`         | Show a pattern for `dur` seconds      |
-| `"x"` (crossfade) | `from`, `to` | Smoothstep crossfade over 0.8 s       |
-| `"h"` (hold)      | `fn`         | Hold a pattern for `sleep(t)` seconds |
+| Segment type      | Key          | Description                                                              |
+| ----------------- | ------------ | ------------------------------------------------------------------------ |
+| `"p"` (pattern)   | `fn`         | Show a pattern for its item duration (`spc`, nested total, or `.time()`) |
+| `"x"` (crossfade) | `from`, `to` | Smoothstep crossfade over ≤0.8 s                                         |
+| `"h"` (hold)      | `fn`         | Hold a pattern for `sleep(t)` seconds                                    |
 
-If the sequence contains `sleep(Infinity)`, `totalDur` is set to `Infinity` and the sequence does **not loop**. Otherwise `totalDur` is finite and time wraps via modulo for looping. A crossfade back to the first pattern is appended automatically when looping.
+If the sequence contains `sleep(Infinity)`, `totalDur` is set to `Infinity` and the sequence does **not loop**. Otherwise `totalDur` is finite and time wraps via modulo for looping.
+
+The wrap-around transition from the last pattern to the first uses the same transition duration rule as any other transition.
+
+Patterns inside a seq receive **local time** (time relative to segment start, not global program time). This keeps nested sequencing stable — an inner seq sees time from 0 inside its own (possibly longer) block.
 
 ## Program-Relative Time
 
@@ -149,13 +172,13 @@ When the user runs the code (Ctrl+Enter), `programStartTime` is captured from `g
 
 ## Dynamic Grid Size
 
-`grid(n)` (injected as `_setGrid`) allows the user to set the pin grid resolution from 2 to 64 (default 32). It works via a **deferred rebuild** pattern:
+`setdim(n)` allows the user to set the pin grid resolution from 2 to 64 (default 32). It works via a **deferred rebuild** pattern:
 
-1. During script execution, `grid(n)` stores the requested size in `_pendingGridSize`.
+1. During script execution, `setdim(n)` stores the requested size in pending config.
 2. After the script finishes, `runProgram()` checks `_pendingGridSize` and calls `rebuildGrid(n)` if changed.
 3. `rebuildGrid(n)` tears down the old instanced mesh, edge geometry, shell, and data arrays, then creates new ones sized to `n × n`.
 
-The old pattern factory `grid(spacing)` was renamed to `gridlines(spacing)` to free the `grid` name for the size API.
+`setspc(n)` follows the same pending-config model and sets global seconds-per-cycle used by `seq` compilation.
 
 ## Adding a New Pattern Type
 

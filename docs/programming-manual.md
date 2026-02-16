@@ -37,7 +37,7 @@ map((x, z, t) => sin(x * 10 + t) * 0.5 + 0.5);
 A sequence of built-in patterns:
 
 ```js
-seq(2, wave(1, 1), ripple(0.5, 0.5, 3), pyramid());
+seq(wave(1, 1), ripple(0.5, 0.5, 3), pyramid());
 ```
 
 Chaining transforms on a pattern:
@@ -206,18 +206,31 @@ checker(4).ease(); // rounded checkerboard
 
 ## Sequencing
 
-### `seq(duration, ...patterns)`
+### `seq(...patterns)`
 
-Cycle through patterns with smooth transitions. Each pattern holds for `duration` seconds, then crossfades to the next over 0.8 seconds.
+Cycle through patterns with smooth crossfade transitions. Each non-sleep pattern gets one cycle by default. A cycle is `secondsPerCycle` seconds (default 1s, configurable via `setspc(n)`). The sequence loops indefinitely.
 
 ```js
-seq(2, flat(0), pyramid(), wave(2, 2), ripple(0.5, 0.5, 4), checker(5));
+seq(flat(0), pyramid(), wave(2, 2), ripple(0.5, 0.5, 4), checker(5));
 ```
 
-By default the sequence loops indefinitely. You can chain transforms on a sequence:
+Nesting `seq()` keeps the same seconds-per-cycle and extends total sequence duration:
 
 ```js
-seq(1, wave(1, 0), wave(0, 1)).slow(2);
+// all patterns use the same cycle length; nesting makes the total longer
+seq(wave(1, 1), seq(pyramid(), checker(4)));
+```
+
+You can chain transforms on a sequence:
+
+```js
+seq(wave(1, 0), wave(0, 1)).slow(2);
+```
+
+Use `.time(seconds)` to set precise duration for an item (including a nested `seq`):
+
+```js
+seq(wave(1, 1), seq(pyramid(), checker(4)).time(12)); // nested seq gets 12s
 ```
 
 ### `sleep(duration)`
@@ -226,10 +239,10 @@ Used inside `seq()` to hold the current pattern for a duration. `sleep(Infinity)
 
 ```js
 // Play once and hold on the last pattern forever
-seq(2, flat(0), wave(1, 1), pyramid(), sleep(Infinity));
+seq(flat(0), wave(1, 1), pyramid(), sleep(Infinity));
 
 // Pause between patterns
-seq(1, wave(1, 1), sleep(3), ripple(0.5, 0.5, 3));
+seq(wave(1, 1), sleep(3), ripple(0.5, 0.5, 3));
 ```
 
 When you re-run the code (Ctrl+Enter), time resets to 0 and the sequence starts from the beginning.
@@ -288,6 +301,20 @@ wave(1, 1).blend(pyramid(), pulse(0.5));
 ---
 
 ## Configuration
+
+### `setspc(n)`
+
+Set global seconds per cycle used by `seq()`. Default is `1`. Must be positive.
+
+```js
+setspc(0.5); // faster sequencing: each cycle is 0.5s
+seq(wave(1, 1), pyramid(), checker(4));
+```
+
+```js
+setspc(2); // slower sequencing: each cycle is 2s
+seq(wave(1, 1), seq(pyramid(), checker(4)));
+```
 
 ### `setdim(n)`
 
@@ -385,6 +412,18 @@ wave(2, 0).offset(
 
 ## Time Transforms
 
+### `.time(seconds)`
+
+Set the exact duration a pattern occupies inside a `seq()`. Overrides the default cycle duration for that item. When applied to a nested `seq()`, it sets that nested sequence's total duration. Outside of `seq()`, `.time()` is transparent.
+
+```js
+// wave gets 10s, others use the default cycle duration
+seq(wave(1, 1).time(10), pyramid(), checker(4));
+
+// set a nested seq to 12 seconds total
+seq(wave(1, 1), seq(pyramid(), checker(4)).time(12));
+```
+
 ### `.slow(factor)`
 
 Slow down a pattern's time evolution.
@@ -466,7 +505,6 @@ noise(6).mul(
 
 ```js
 seq(
-  2,
   wave(1, 1).rotate(tween(0, PI, 3)),
   checker(6).ease(),
   wave(3, 0).rotate(osc(0.5, 0, PI)),
@@ -475,6 +513,20 @@ seq(
   flat(0.02),
   sleep(Infinity),
 );
+```
+
+**Mixed-duration sequence:**
+
+```js
+// The noise lingers for 8s while the others use the default cycle duration
+seq(wave(1, 1), noise(5).time(8), pyramid(), checker(4));
+```
+
+**Nested subdivision:**
+
+```js
+// nesting keeps the same seconds-per-cycle and extends total duration
+seq(wave(1, 1), seq(pyramid(), checker(4)));
 ```
 
 **Conway-style cellular (using grid snapping):**

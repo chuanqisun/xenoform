@@ -48,10 +48,11 @@ describe("interpreter", () => {
   });
 
   it("captures config changes", () => {
-    const result = runCode("setdim(16)\nsetbackground('#ff0000')\nsetrotate('off')\nflat(0.5)");
+    const result = runCode("setdim(16)\nsetbackground('#ff0000')\nsetrotate('off')\nsetspc(2)\nflat(0.5)");
     expect(result.config.gridSize).toBe(16);
     expect(result.config.background).toBe("#ff0000");
     expect(result.config.rotateMode).toBe("off");
+    expect(result.config.secondsPerCycle).toBe(2);
   });
 
   it("chaining works end-to-end", () => {
@@ -64,7 +65,7 @@ describe("interpreter", () => {
   });
 
   it("seq with sleep compiles", () => {
-    const result = runCode("seq(1, flat(0), sleep(2), flat(1))");
+    const result = runCode("seq(flat(0), sleep(2), flat(1))");
     expect(result.pattern).not.toBeNull();
     expect(result.error).toBeNull();
   });

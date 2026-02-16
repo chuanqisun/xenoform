@@ -18,56 +18,106 @@ export function resolveArg(v: unknown): PatternFn {
   return () => c;
 }
 
+/** Default seconds-per-cycle for sequence timing. */
+export const DEFAULT_SECONDS_PER_CYCLE = 1;
+
+export interface CompileContext {
+  secondsPerCycle: number;
+}
+
+const defaultContext: CompileContext = {
+  secondsPerCycle: DEFAULT_SECONDS_PER_CYCLE,
+};
+
+interface CompiledNode {
+  fn: PatternFn;
+  duration: number;
+}
+
+function resolveArgWithContext(v: unknown, ctx: CompileContext): PatternFn {
+  if (v instanceof Pattern) return compile(v, ctx);
+  if (typeof v === "function") return v as PatternFn;
+  const c = v as number;
+  return () => c;
+}
+
 /** Compile a Pattern AST node into an executable PatternFn. */
-export function compile(pat: Pattern): PatternFn {
+export function compile(pat: Pattern, ctx: Partial<CompileContext> = {}): PatternFn {
+  const fullCtx: CompileContext = {
+    ...defaultContext,
+    ...ctx,
+  };
+  return compileNode(pat, fullCtx).fn;
+}
+
+function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
   const { _type: type, _args: a } = pat;
   const { sin, cos, abs, sqrt, floor, PI, max, round } = Math;
+  const spc = ctx.secondsPerCycle;
+
+  function transitionDuration(toDur: number): number {
+    return Math.min(0.8, toDur * 0.4);
+  }
+
+  function unwrapTime(p: Pattern): { inner: Pattern; duration: number | null } {
+    if (p._type === "time") {
+      return { inner: p._args.source as Pattern, duration: p._args.seconds as number };
+    }
+    return { inner: p, duration: null };
+  }
 
   switch (type) {
     case "flat": {
       const h = a.h as number;
-      return () => h;
+      return { fn: () => h, duration: spc };
     }
     case "wave": {
       const fx = (a.fx as number) ?? 1;
       const fz = (a.fz as number) ?? 1;
-      return (x, z) => (sin(x * fx * PI * 2) * 0.5 + 0.5) * (cos(z * fz * PI * 2) * 0.5 + 0.5);
+      return {
+        fn: (x, z) => (sin(x * fx * PI * 2) * 0.5 + 0.5) * (cos(z * fz * PI * 2) * 0.5 + 0.5),
+        duration: spc,
+      };
     }
     case "ripple": {
       const cx = (a.cx as number) ?? 0.5;
       const cz = (a.cz as number) ?? 0.5;
       const freq = (a.freq as number) ?? 3;
-      return (x, z) => {
-        const d = sqrt((x - cx) ** 2 + (z - cz) ** 2);
-        return sin(d * freq * PI * 2) * 0.5 + 0.5;
+      return {
+        fn: (x, z) => {
+          const d = sqrt((x - cx) ** 2 + (z - cz) ** 2);
+          return sin(d * freq * PI * 2) * 0.5 + 0.5;
+        },
+        duration: spc,
       };
     }
     case "checker": {
       const sz = (a.size as number) ?? 5;
-      return (x, z) => ((floor(x * sz) + floor(z * sz)) % 2 === 0 ? 0.9 : 0.1);
+      return { fn: (x, z) => ((floor(x * sz) + floor(z * sz)) % 2 === 0 ? 0.9 : 0.1), duration: spc };
     }
     case "gridlines": {
       const sp = (a.spacing as number) ?? 5;
-      return (x, z, _t, n) => {
-        const ix = round(x * (n - 1));
-        const iz = round(z * (n - 1));
-        return ix % sp === 0 || iz % sp === 0 ? 1 : 0.05;
+      return {
+        fn: (x, z, _t, n) => {
+          const ix = round(x * (n - 1));
+          const iz = round(z * (n - 1));
+          return ix % sp === 0 || iz % sp === 0 ? 1 : 0.05;
+        },
+        duration: spc,
       };
     }
     case "pyramid":
-      return (x, z) => 1 - max(abs(x - 0.5), abs(z - 0.5)) * 2;
+      return { fn: (x, z) => 1 - max(abs(x - 0.5), abs(z - 0.5)) * 2, duration: spc };
     case "noise": {
       const sc = (a.scale as number) ?? 4;
-      return (x, z, t) => perlin2(x * sc + t * 0.3, z * sc + t * 0.2);
+      return { fn: (x, z, t) => perlin2(x * sc + t * 0.3, z * sc + t * 0.2), duration: spc };
     }
     case "map":
-      return a.fn as PatternFn;
+      return { fn: a.fn as PatternFn, duration: spc };
     case "sleep":
-      return () => 0;
+      return { fn: () => 0, duration: (a.duration as number) ?? Infinity };
     case "seq": {
-      const dur = a.dur as number;
       const items = a.patterns as Pattern[];
-      const transTime = 0.8;
 
       interface Segment {
         s: number;
@@ -78,119 +128,200 @@ export function compile(pat: Pattern): PatternFn {
         to?: PatternFn;
       }
 
+      interface PlannedItem {
+        type: "p" | "h";
+        fn: PatternFn;
+        duration: number;
+      }
+
+      const planned: PlannedItem[] = [];
+
+      for (const item of items) {
+        const { inner, duration: explicitDur } = unwrapTime(item);
+        if (inner._type === "sleep") {
+          const sleepDur = explicitDur ?? ((inner._args.duration as number) ?? Infinity);
+          planned.push({ type: "h", fn: () => 0, duration: sleepDur });
+          if (!isFinite(sleepDur)) break;
+          continue;
+        }
+
+        const compiled = compileNode(inner, ctx);
+        planned.push({
+          type: "p",
+          fn: compiled.fn,
+          duration: explicitDur ?? compiled.duration,
+        });
+      }
+
       const segs: Segment[] = [];
       let cursor = 0;
       let lastFn: PatternFn | null = null;
+      let firstFn: PatternFn | null = null;
+      let firstPatternDur = spc;
       let hasInfHold = false;
 
-      for (const item of items) {
-        if (item._type === "sleep") {
-          const sd = item._args.duration as number;
-          if (!isFinite(sd)) {
+      for (const plan of planned) {
+        if (plan.type === "h") {
+          if (!isFinite(plan.duration)) {
             segs.push({ s: cursor, e: Infinity, type: "h", fn: lastFn ?? undefined });
             hasInfHold = true;
             break;
           }
           if (lastFn) {
-            segs.push({ s: cursor, e: cursor + sd, type: "h", fn: lastFn });
-            cursor += sd;
+            segs.push({ s: cursor, e: cursor + plan.duration, type: "h", fn: lastFn });
+            cursor += plan.duration;
           }
         } else {
-          const fn = compile(item);
-          if (lastFn !== null) {
-            segs.push({ s: cursor, e: cursor + transTime, type: "x", from: lastFn, to: fn });
-            cursor += transTime;
+          const segDur = plan.duration;
+          const fn = plan.fn;
+          if (firstFn === null) {
+            firstFn = fn;
+            firstPatternDur = segDur;
           }
-          segs.push({ s: cursor, e: cursor + dur, type: "p", fn });
-          cursor += dur;
+          if (lastFn !== null) {
+            const tt = transitionDuration(segDur);
+            segs.push({ s: cursor, e: cursor + tt, type: "x", from: lastFn, to: fn });
+            cursor += tt;
+          }
+          segs.push({ s: cursor, e: cursor + segDur, type: "p", fn });
+          cursor += segDur;
           lastFn = fn;
         }
       }
 
-      if (!hasInfHold && segs.length > 0) {
-        const firstFn = segs.find((s) => s.type === "p")?.fn;
-        if (firstFn && lastFn && firstFn !== lastFn) {
-          segs.push({ s: cursor, e: cursor + transTime, type: "x", from: lastFn, to: firstFn });
-          cursor += transTime;
-        }
+      if (!hasInfHold && firstFn && lastFn && firstFn !== lastFn) {
+        const tt = transitionDuration(firstPatternDur);
+        segs.push({ s: cursor, e: cursor + tt, type: "x", from: lastFn, to: firstFn });
+        cursor += tt;
       }
 
       const totalDur = hasInfHold ? Infinity : cursor;
 
-      return (x, z, t, n) => {
-        const lt = isFinite(totalDur) ? t % totalDur : t;
+      const fn: PatternFn = (x, z, t, n) => {
+        const lt = isFinite(totalDur) && totalDur > 0 ? t % totalDur : t;
         for (const seg of segs) {
           if (lt < seg.e || !isFinite(seg.e)) {
-            if (seg.type === "p" || seg.type === "h") return seg.fn ? seg.fn(x, z, t, n) : 0;
+            if (seg.type === "p" || seg.type === "h") {
+              return seg.fn ? seg.fn(x, z, lt - seg.s, n) : 0;
+            }
             if (seg.type === "x") {
               const bl = smoothstep((lt - seg.s) / (seg.e - seg.s));
-              return (seg.from?.(x, z, t, n) ?? 0) * (1 - bl) + (seg.to?.(x, z, t, n) ?? 0) * bl;
+              const localT = lt - seg.s;
+              return (seg.from?.(x, z, localT, n) ?? 0) * (1 - bl) + (seg.to?.(x, z, localT, n) ?? 0) * bl;
             }
           }
         }
-        return lastFn ? lastFn(x, z, t, n) : 0;
+        return lastFn ? lastFn(x, z, 0, n) : 0;
       };
+
+      return { fn, duration: totalDur };
     }
     case "rotate": {
-      const srcFn = compile(a.source as Pattern);
-      const angFn = resolveArg(a.angle);
-      return (x, z, t, n) => {
-        const ang = angFn(x, z, t, n);
-        const cx2 = x - 0.5;
-        const cz2 = z - 0.5;
-        return srcFn(cx2 * cos(ang) - cz2 * sin(ang) + 0.5, cx2 * sin(ang) + cz2 * cos(ang) + 0.5, t, n);
+      const srcNode = compileNode(a.source as Pattern, ctx);
+      const srcFn = srcNode.fn;
+      const angFn = resolveArgWithContext(a.angle, ctx);
+      return {
+        fn: (x, z, t, n) => {
+          const ang = angFn(x, z, t, n);
+          const cx2 = x - 0.5;
+          const cz2 = z - 0.5;
+          return srcFn(cx2 * cos(ang) - cz2 * sin(ang) + 0.5, cx2 * sin(ang) + cz2 * cos(ang) + 0.5, t, n);
+        },
+        duration: srcNode.duration,
       };
     }
     case "scale": {
-      const srcFn = compile(a.source as Pattern);
+      const srcNode = compileNode(a.source as Pattern, ctx);
+      const srcFn = srcNode.fn;
       const sx = a.sx as number;
       const sz = (a.sz as number) ?? sx;
-      return (x, z, t, n) => srcFn((x - 0.5) / sx + 0.5, (z - 0.5) / sz + 0.5, t, n);
+      return {
+        fn: (x, z, t, n) => srcFn((x - 0.5) / sx + 0.5, (z - 0.5) / sz + 0.5, t, n),
+        duration: srcNode.duration,
+      };
     }
     case "offset": {
-      const srcFn = compile(a.source as Pattern);
-      const oxFn = resolveArg(a.ox ?? 0);
-      const ozFn = resolveArg(a.oz ?? 0);
-      return (x, z, t, n) => srcFn(x - oxFn(x, z, t, n), z - ozFn(x, z, t, n), t, n);
+      const srcNode = compileNode(a.source as Pattern, ctx);
+      const srcFn = srcNode.fn;
+      const oxFn = resolveArgWithContext(a.ox ?? 0, ctx);
+      const ozFn = resolveArgWithContext(a.oz ?? 0, ctx);
+      return {
+        fn: (x, z, t, n) => srcFn(x - oxFn(x, z, t, n), z - ozFn(x, z, t, n), t, n),
+        duration: srcNode.duration,
+      };
     }
     case "slow": {
-      const srcFn = compile(a.source as Pattern);
+      const srcNode = compileNode(a.source as Pattern, ctx);
+      const srcFn = srcNode.fn;
       const f = a.factor as number;
-      return (x, z, t, n) => srcFn(x, z, t / f, n);
+      return {
+        fn: (x, z, t, n) => srcFn(x, z, t / f, n),
+        duration: srcNode.duration * f,
+      };
     }
     case "fast": {
-      const srcFn = compile(a.source as Pattern);
+      const srcNode = compileNode(a.source as Pattern, ctx);
+      const srcFn = srcNode.fn;
       const f = a.factor as number;
-      return (x, z, t, n) => srcFn(x, z, t * f, n);
+      return {
+        fn: (x, z, t, n) => srcFn(x, z, t * f, n),
+        duration: srcNode.duration / f,
+      };
     }
     case "ease": {
-      const srcFn = compile(a.source as Pattern);
-      return (x, z, t, n) => smoothstep(srcFn(x, z, t, n));
+      const srcNode = compileNode(a.source as Pattern, ctx);
+      const srcFn = srcNode.fn;
+      return { fn: (x, z, t, n) => smoothstep(srcFn(x, z, t, n)), duration: srcNode.duration };
     }
     case "inv": {
-      const srcFn = compile(a.source as Pattern);
-      return (x, z, t, n) => 1 - srcFn(x, z, t, n);
+      const srcNode = compileNode(a.source as Pattern, ctx);
+      const srcFn = srcNode.fn;
+      return { fn: (x, z, t, n) => 1 - srcFn(x, z, t, n), duration: srcNode.duration };
     }
     case "blend": {
-      const aFn = compile(a.a as Pattern);
-      const bFn = compile(a.b as Pattern);
-      const mFn = resolveArg(a.mix);
-      return (x, z, t, n) => {
-        const m = mFn(x, z, t, n);
-        return aFn(x, z, t, n) * (1 - m) + bFn(x, z, t, n) * m;
+      const aNode = compileNode(a.a as Pattern, ctx);
+      const bNode = compileNode(a.b as Pattern, ctx);
+      const aFn = aNode.fn;
+      const bFn = bNode.fn;
+      const mFn = resolveArgWithContext(a.mix, ctx);
+      return {
+        fn: (x, z, t, n) => {
+          const m = mFn(x, z, t, n);
+          return aFn(x, z, t, n) * (1 - m) + bFn(x, z, t, n) * m;
+        },
+        duration: Math.max(aNode.duration, bNode.duration),
       };
     }
     case "add": {
-      const aFn = compile(a.a as Pattern);
-      const bFn = compile(a.b as Pattern);
-      return (x, z, t, n) => clamp01(aFn(x, z, t, n) + bFn(x, z, t, n));
+      const aNode = compileNode(a.a as Pattern, ctx);
+      const bNode = compileNode(a.b as Pattern, ctx);
+      const aFn = aNode.fn;
+      const bFn = bNode.fn;
+      return {
+        fn: (x, z, t, n) => clamp01(aFn(x, z, t, n) + bFn(x, z, t, n)),
+        duration: Math.max(aNode.duration, bNode.duration),
+      };
     }
     case "mul": {
-      const aFn = compile(a.a as Pattern);
-      const bFn = compile(a.b as Pattern);
-      return (x, z, t, n) => aFn(x, z, t, n) * bFn(x, z, t, n);
+      const aNode = compileNode(a.a as Pattern, ctx);
+      const bNode = compileNode(a.b as Pattern, ctx);
+      const aFn = aNode.fn;
+      const bFn = bNode.fn;
+      return {
+        fn: (x, z, t, n) => aFn(x, z, t, n) * bFn(x, z, t, n),
+        duration: Math.max(aNode.duration, bNode.duration),
+      };
+    }
+    case "time": {
+      const srcNode = compileNode(a.source as Pattern, ctx);
+      const srcFn = srcNode.fn;
+      const seconds = a.seconds as number;
+      return {
+        fn: (x, z, t, n) => srcFn(x, z, t, n),
+        duration: seconds,
+      };
     }
     default:
-      return () => 0;
+      return { fn: () => 0, duration: spc };
   }
 }

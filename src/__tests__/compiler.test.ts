@@ -151,16 +151,79 @@ describe("compiler", () => {
     it("compiles without error", () => {
       const p1 = new Pattern("flat", { h: 0 });
       const p2 = new Pattern("flat", { h: 1 });
-      const fn = compile(new Pattern("seq", { dur: 1, patterns: [p1, p2] }));
+      const fn = compile(new Pattern("seq", { patterns: [p1, p2] }));
       expect(typeof fn).toBe("function");
     });
 
     it("returns values for different times", () => {
       const p1 = new Pattern("flat", { h: 0.2 });
       const p2 = new Pattern("flat", { h: 0.8 });
-      const fn = compile(new Pattern("seq", { dur: 2, patterns: [p1, p2] }));
+      const fn = compile(new Pattern("seq", { patterns: [p1, p2] }));
       // At t=0, should be in first pattern
       expect(fn(0, 0, 0, 32)).toBeCloseTo(0.2);
+    });
+
+    it("auto-subdivides time evenly among patterns", () => {
+      const p1 = new Pattern("flat", { h: 0.2 });
+      const p2 = new Pattern("flat", { h: 0.8 });
+      // With secondsPerCycle=1 by default:
+      // p1: [0,1], crossfade: [1,1.4], p2: [1.4,2.4], wrap xfade: [2.4,2.8]
+      const fn = compile(new Pattern("seq", { patterns: [p1, p2] }));
+      expect(fn(0, 0, 1, 32)).toBeCloseTo(0.2); // firmly in p1
+      expect(fn(0, 0, 5, 32)).toBeCloseTo(0.8); // firmly in p2
+    });
+
+    it("uses configured seconds-per-cycle", () => {
+      const p1 = new Pattern("flat", { h: 0.1 });
+      const p2 = new Pattern("flat", { h: 0.9 });
+      const fn = compile(new Pattern("seq", { patterns: [p1, p2] }), { secondsPerCycle: 2 });
+      // p1: [0,2], xfade [2,2.8], p2: [2.8,4.8]
+      expect(fn(0, 0, 1.5, 32)).toBeCloseTo(0.1);
+      expect(fn(0, 0, 3.2, 32)).toBeCloseTo(0.9);
+    });
+
+    it(".time() overrides default duration in seq", () => {
+      const p1 = new Pattern("flat", { h: 0.2 });
+      const p1Timed = new Pattern("time", { source: p1, seconds: 10 });
+      const p2 = new Pattern("flat", { h: 0.8 });
+      const fn = compile(new Pattern("seq", { patterns: [p1Timed, p2] }));
+      // At t=0, in first pattern (10s duration)
+      expect(fn(0, 0, 0, 32)).toBeCloseTo(0.2);
+      // At t=5, still in first pattern (well within 10s)
+      expect(fn(0, 0, 5, 32)).toBeCloseTo(0.2);
+      // At t=9, still in first pattern
+      expect(fn(0, 0, 9, 32)).toBeCloseTo(0.2);
+    });
+
+    it("nested seq subdivides parent allocation", () => {
+      const a = new Pattern("flat", { h: 0.1 });
+      const b = new Pattern("flat", { h: 0.5 });
+      const c = new Pattern("flat", { h: 0.9 });
+      const innerSeq = new Pattern("seq", { patterns: [b, c] });
+      // nested seq extends duration instead of subdividing parent duration
+      const fn = compile(new Pattern("seq", { patterns: [a, innerSeq] }));
+      // At t=0, should be in pattern a
+      expect(fn(0, 0, 0, 32)).toBeCloseTo(0.1);
+    });
+
+    it("wrap transition has the same duration rule as internal transitions", () => {
+      const p1 = new Pattern("flat", { h: 0 });
+      const p2 = new Pattern("flat", { h: 1 });
+      const fn = compile(new Pattern("seq", { patterns: [p1, p2] }));
+      // total duration is 2.8; just after wrap starts we should be in blend, not hard jump
+      const v = fn(0, 0, 2.5, 32);
+      expect(v).toBeGreaterThan(0);
+      expect(v).toBeLessThan(1);
+    });
+  });
+
+  describe("time", () => {
+    it("is transparent outside of seq (passes through to source)", () => {
+      const flat = new Pattern("flat", { h: 0.6 });
+      const timed = new Pattern("time", { source: flat, seconds: 5 });
+      const fn = compile(timed);
+      expect(fn(0, 0, 0, 32)).toBeCloseTo(0.6);
+      expect(fn(0.5, 0.5, 10, 32)).toBeCloseTo(0.6);
     });
   });
 });

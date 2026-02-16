@@ -7,7 +7,7 @@
 
 import { TAU, clamp01, fract, lerp, smoothstep } from "../utils/math-helpers.ts";
 import type { PendingConfig } from "./config-api.ts";
-import { setbackground, setdim, setrotate } from "./config-api.ts";
+import { setbackground, setdim, setrotate, setspc } from "./config-api.ts";
 import * as factories from "./pattern-factories.ts";
 import * as signals from "./signal-functions.ts";
 
@@ -53,6 +53,7 @@ export function buildScope(config: PendingConfig): Scope {
   add("setdim", (n: number) => setdim(config, n));
   add("setbackground", (color: string) => setbackground(config, color));
   add("setrotate", (mode: string) => setrotate(config, mode));
+  add("setspc", (n: number) => setspc(config, n));
 
   // Math builtins
   add("sin", Math.sin);

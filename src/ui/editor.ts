@@ -15,7 +15,7 @@ export const defaultCode = `// Shape Display — chain patterns with methods
 // x, z ∈ [0,1]  t = time  n = grid size
 // Ctrl/Cmd + Enter to run
 
-seq(1,
+seq(
   flat(0),
   wave(1, 1).rotate(tween(0, PI, 4)),
   ripple(0.5, 0.5, 3),

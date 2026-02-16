@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Pattern } from "../language/ast.ts";
 import { compile } from "../language/compiler.ts";
-import { createPendingConfig, setbackground, setdim, setrotate } from "../library/config-api.ts";
+import { createPendingConfig, setbackground, setdim, setrotate, setspc } from "../library/config-api.ts";
 import * as factories from "../library/pattern-factories.ts";
 import { buildScope } from "../library/scope.ts";
 import * as signals from "../library/signal-functions.ts";
@@ -23,7 +23,7 @@ describe("pattern-factories", () => {
   });
 
   it("seq() creates a seq pattern from varargs", () => {
-    const p = factories.seq(1, factories.flat(0), factories.wave());
+    const p = factories.seq(factories.flat(0), factories.wave());
     expect(p._type).toBe("seq");
     expect((p._args.patterns as Pattern[]).length).toBe(2);
   });
@@ -107,6 +107,18 @@ describe("config-api", () => {
     setrotate(config, "invalid");
     expect(config.rotateMode).toBeNull();
   });
+
+  it("setspc stores positive seconds-per-cycle", () => {
+    const config = createPendingConfig();
+    setspc(config, 2.5);
+    expect(config.secondsPerCycle).toBe(2.5);
+  });
+
+  it("setspc ignores non-positive values", () => {
+    const config = createPendingConfig();
+    setspc(config, 0);
+    expect(config.secondsPerCycle).toBeNull();
+  });
 });
 
 describe("scope", () => {
@@ -139,5 +151,9 @@ describe("scope", () => {
     const setdimIdx = scope.names.indexOf("setdim");
     (scope.values[setdimIdx] as (n: number) => void)(16);
     expect(config.gridSize).toBe(16);
+
+    const setspcIdx = scope.names.indexOf("setspc");
+    (scope.values[setspcIdx] as (n: number) => void)(1.5);
+    expect(config.secondsPerCycle).toBe(1.5);
   });
 });

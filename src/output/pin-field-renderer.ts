@@ -188,10 +188,14 @@ export function updatePins(
   globalTime: number,
   patternFn: ((x: number, z: number, t: number, n: number) => number) | null,
   patternTime: number,
+  dt: number,
   started: boolean,
 ): number {
   const { grid, total, half, current, prevFrame, jitterPhase, jitterFreq, pins, heightData, heightTex } = field;
   const JITTER_AMP_LOCAL = 0.6;
+  const INTERP_TAU = 0.08;
+  const MAX_SPEED = 600;
+  const alpha = 1 - Math.exp(-dt / INTERP_TAU);
 
   prevFrame.set(current);
 
@@ -205,7 +209,11 @@ export function updatePins(
       h = Math.max(0, Math.min(1, h || 0));
       const target = h * MAX_P;
       const jit = Math.sin(globalTime * jitterFreq[i] + jitterPhase[i]) * JITTER_AMP_LOCAL;
-      current[i] = Math.max(-JITTER_AMP_LOCAL, Math.min(MAX_P + JITTER_AMP_LOCAL, target + jit));
+      const targetWithJitter = Math.max(-JITTER_AMP_LOCAL, Math.min(MAX_P + JITTER_AMP_LOCAL, target + jit));
+      const desiredDelta = (targetWithJitter - current[i]) * alpha;
+      const maxStep = MAX_SPEED * dt;
+      const step = Math.max(-maxStep, Math.min(maxStep, desiredDelta));
+      current[i] += step;
     }
   }
 

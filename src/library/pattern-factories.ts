@@ -39,8 +39,8 @@ export function map(fn: PatternFn): Pattern {
   return new Pattern("map", { fn });
 }
 
-export function seq(dur: number, ...patterns: Pattern[]): Pattern {
-  return new Pattern("seq", { dur, patterns });
+export function seq(...patterns: Pattern[]): Pattern {
+  return new Pattern("seq", { patterns });
 }
 
 export function sleep(duration = Infinity): Pattern {

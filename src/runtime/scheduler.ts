@@ -52,7 +52,7 @@ export function startLoop(sceneCtx: SceneContext, pinField: { current: PinField 
     }
 
     const patternTime = state.globalTime - state.programStartTime;
-    const intensity = updatePins(pinField.current, state.globalTime, state.activePattern, patternTime, state.started);
+    const intensity = updatePins(pinField.current, state.globalTime, state.activePattern, patternTime, dt, state.started);
 
     if (audio.current) {
       updateAudio(audio.current, intensity, MAX_P);
