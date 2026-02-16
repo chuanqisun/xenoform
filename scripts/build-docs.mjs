@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, copyFileSync, rmSync } from "node:fs";
-import { resolve, basename, join } from "node:path";
 import markdownIt from "markdown-it";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 
 const rootDir = resolve(import.meta.dirname, "..");
 const docsDir = resolve(rootDir, "docs");
