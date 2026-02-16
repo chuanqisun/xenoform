@@ -9,10 +9,11 @@ import { Pattern } from "./ast.ts";
 
 /**
  * Resolve a value that may be a Pattern, a function, or a constant
- * into a PatternFn.
+ * into a PatternFn. When a CompileContext is provided, it is forwarded
+ * to compile() for Pattern arguments.
  */
-export function resolveArg(v: unknown): PatternFn {
-  if (v instanceof Pattern) return compile(v);
+export function resolveArg(v: unknown, ctx?: Partial<CompileContext>): PatternFn {
+  if (v instanceof Pattern) return compile(v, ctx);
   if (typeof v === "function") return v as PatternFn;
   const c = v as number;
   return () => c;
@@ -36,13 +37,6 @@ interface CompiledNode {
   loop?: boolean;
   /** For seq nodes: metadata for the wrap-around crossfade at loop boundaries. */
   wrapInfo?: { firstFn: PatternFn; lastFn: PatternFn; firstDuration: number };
-}
-
-function resolveArgWithContext(v: unknown, ctx: CompileContext): PatternFn {
-  if (v instanceof Pattern) return compile(v, ctx);
-  if (typeof v === "function") return v as PatternFn;
-  const c = v as number;
-  return () => c;
 }
 
 function transitionDuration(toDur: number): number {
@@ -278,7 +272,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
     case "rotate": {
       const srcNode = compileNode(a.source as Pattern, ctx);
       const srcFn = srcNode.fn;
-      const angFn = resolveArgWithContext(a.angle, ctx);
+      const angFn = resolveArg(a.angle, ctx);
       return {
         fn: (x, z, t, n) => {
           const ang = angFn(x, z, t, n);
@@ -304,8 +298,8 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
     case "offset": {
       const srcNode = compileNode(a.source as Pattern, ctx);
       const srcFn = srcNode.fn;
-      const oxFn = resolveArgWithContext(a.ox ?? 0, ctx);
-      const ozFn = resolveArgWithContext(a.oz ?? 0, ctx);
+      const oxFn = resolveArg(a.ox ?? 0, ctx);
+      const ozFn = resolveArg(a.oz ?? 0, ctx);
       return {
         fn: (x, z, t, n) => srcFn(x - oxFn(x, z, t, n), z - ozFn(x, z, t, n), t, n),
         duration: srcNode.duration,
@@ -347,7 +341,7 @@ function compileNode(pat: Pattern, ctx: CompileContext): CompiledNode {
       const bNode = compileNode(a.b as Pattern, ctx);
       const aFn = aNode.fn;
       const bFn = bNode.fn;
-      const mFn = resolveArgWithContext(a.mix, ctx);
+      const mFn = resolveArg(a.mix, ctx);
       return {
         fn: (x, z, t, n) => {
           const m = mFn(x, z, t, n);

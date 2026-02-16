@@ -49,6 +49,22 @@ body {
   display: flex;
 }
 
+#resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 310;
+  touch-action: none;
+}
+#resize-handle:hover,
+#resize-handle:active {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
 #header {
   padding: 12px 16px 8px;
   display: flex;
